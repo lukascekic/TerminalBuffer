@@ -1,0 +1,58 @@
+package terminal.buffer
+
+class TerminalBuffer(
+    var width: Int,
+    var height: Int,
+    val maxScrollbackSize: Int = 1000
+) {
+    private val screen: MutableList<Line> = MutableList(height) { Line(width) }
+    private val scrollback: MutableList<Line> = mutableListOf()
+    private var cursorColumn: Int = 0
+    private var cursorRow: Int = 0
+    var currentAttributes: TextAttributes = TextAttributes.DEFAULT
+
+    val scrollbackSize: Int get() = scrollback.size
+
+    // --- Cursor ---
+
+    fun getCursorPosition(): CursorPosition = CursorPosition(cursorColumn, cursorRow)
+
+    fun setCursorPosition(column: Int, row: Int) {
+        cursorColumn = column.coerceIn(0, width - 1)
+        cursorRow = row.coerceIn(0, height - 1)
+    }
+
+    // --- Content Access ---
+
+    fun getCell(column: Int, row: Int): Cell = screen[row][column]
+
+    fun getScrollbackCell(column: Int, row: Int): Cell = scrollback[row][column]
+
+    fun getLineAsString(row: Int): String = screen[row].getText()
+
+    fun getScrollbackLineAsString(row: Int): String = scrollback[row].getText()
+
+    fun getScreenContent(): String {
+        val lines = (0 until height).map { getLineAsString(it) }
+        return lines.joinToString("\n").trimEnd('\n', ' ')
+    }
+
+    fun getFullContent(): String {
+        val sbLines = (0 until scrollbackSize).map { getScrollbackLineAsString(it) }
+        val scLines = (0 until height).map { getLineAsString(it) }
+        val all = sbLines + scLines
+        return all.joinToString("\n").trimEnd('\n', ' ')
+    }
+
+    // --- Editing ---
+
+    fun writeText(text: String) {
+        if (text.isEmpty()) return
+        for (ch in text) {
+            if (cursorColumn >= width) break
+            screen[cursorRow][cursorColumn] = Cell(ch, currentAttributes)
+            cursorColumn++
+        }
+        cursorColumn = cursorColumn.coerceAtMost(width - 1)
+    }
+}
