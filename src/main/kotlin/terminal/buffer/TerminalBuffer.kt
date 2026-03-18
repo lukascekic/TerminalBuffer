@@ -2,6 +2,25 @@ package terminal.buffer
 
 import terminal.ansi.TerminalCommand
 
+/**
+ * The main terminal screen buffer that stores and manipulates the text displayed in a terminal.
+ *
+ * The buffer models a fixed-size grid of [Cell] objects ([width] × [height]) backed by a
+ * scrollback history that captures lines pushed off the top of the screen. A cursor tracks the
+ * current write position, and a scroll region (DECSTBM) can constrain scrolling to a sub-range
+ * of rows.
+ *
+ * High-level usage:
+ * 1. Create a buffer: `TerminalBuffer(80, 24)`
+ * 2. Feed parsed commands: `buffer.applyCommand(command)` — or call editing methods directly.
+ * 3. Read the screen: `buffer.getScreenContent()` / `buffer.getCell(col, row)`
+ *
+ * @property width Number of columns in the visible screen. Read-only after construction; use [resize].
+ * @property height Number of rows in the visible screen. Read-only after construction; use [resize].
+ * @property maxScrollbackSize Maximum number of lines retained in scrollback history.
+ * @property currentAttributes The [TextAttributes] applied to newly written characters.
+ * @property scrollbackSize The number of lines currently stored in the scrollback history.
+ */
 class TerminalBuffer(
     width: Int,
     height: Int,
@@ -23,8 +42,14 @@ class TerminalBuffer(
 
     // --- Cursor ---
 
+    /** Returns the current cursor position as a [CursorPosition]. */
     fun getCursorPosition(): CursorPosition = CursorPosition(cursorColumn, cursorRow)
 
+    /**
+     * Move the cursor to ([column], [row]), clamping to valid screen bounds.
+     *
+     * Neither coordinate can go below 0 or beyond the screen edge.
+     */
     fun setCursorPosition(column: Int, row: Int) {
         cursorColumn = column.coerceIn(0, width - 1)
         cursorRow = row.coerceIn(0, height - 1)
@@ -32,19 +57,32 @@ class TerminalBuffer(
 
     // --- Content Access ---
 
+    /** Returns the [Cell] at ([column], [row]) on the visible screen. */
     fun getCell(column: Int, row: Int): Cell = screen[row][column]
 
+    /** Returns the [Cell] at ([column], [row]) in the scrollback history. */
     fun getScrollbackCell(column: Int, row: Int): Cell = scrollback[row][column]
 
+    /** Returns the text content of visible screen row [row] with trailing spaces trimmed. */
     fun getLineAsString(row: Int): String = screen[row].getText()
 
+    /** Returns the text content of scrollback row [row] with trailing spaces trimmed. */
     fun getScrollbackLineAsString(row: Int): String = scrollback[row].getText()
 
+    /**
+     * Returns all visible screen rows joined by newlines, with trailing blank lines removed.
+     *
+     * Each row's trailing spaces are trimmed by [Line.getText].
+     */
     fun getScreenContent(): String {
         val lines = (0 until height).map { getLineAsString(it) }
         return lines.joinToString("\n").trimEnd('\n', ' ')
     }
 
+    /**
+     * Returns the full buffer content — scrollback followed by the visible screen — joined by
+     * newlines, with trailing blank lines removed.
+     */
     fun getFullContent(): String {
         val sbLines = (0 until scrollbackSize).map { getScrollbackLineAsString(it) }
         val scLines = (0 until height).map { getLineAsString(it) }
@@ -54,24 +92,36 @@ class TerminalBuffer(
 
     // --- Cursor Movement ---
 
+    /** Move the cursor up by [n] rows, clamping to row 0. */
     fun moveCursorUp(n: Int) {
         cursorRow = (cursorRow - n).coerceAtLeast(0)
     }
 
+    /** Move the cursor down by [n] rows, clamping to the last row. */
     fun moveCursorDown(n: Int) {
         cursorRow = (cursorRow + n).coerceAtMost(height - 1)
     }
 
+    /** Move the cursor left by [n] columns, clamping to column 0. */
     fun moveCursorLeft(n: Int) {
         cursorColumn = (cursorColumn - n).coerceAtLeast(0)
     }
 
+    /** Move the cursor right by [n] columns, clamping to the last column. */
     fun moveCursorRight(n: Int) {
         cursorColumn = (cursorColumn + n).coerceAtMost(width - 1)
     }
 
     // --- Editing ---
 
+    /**
+     * Write [text] at the current cursor position using [currentAttributes].
+     *
+     * Wide characters (CJK etc.) occupy two columns: a main cell with `width=2` followed by a
+     * continuation cell with `width=0`. If a wide character would not fit in the remaining space
+     * on the line, writing stops. The cursor advances by the character's display width after each
+     * character, stopping at the last column if the line is full.
+     */
     fun writeText(text: String) {
         if (text.isEmpty()) return
         for (ch in text) {
@@ -103,15 +153,32 @@ class TerminalBuffer(
         }
     }
 
+    /**
+     * Fill the entire current row with [char] using [currentAttributes].
+     *
+     * Defaults to a space, which effectively clears the line while preserving current attributes.
+     */
     fun fillLine(char: Char = ' ') {
         val cell = Cell(char, currentAttributes)
         screen[cursorRow].clear(cell)
     }
 
+    /**
+     * Scroll the active scroll region up by one line, inserting a blank line at the bottom.
+     *
+     * When the scroll region covers the full screen, the evicted top line is appended to the
+     * scrollback history. Excess scrollback lines (beyond [maxScrollbackSize]) are discarded
+     * from the oldest end.
+     */
     fun insertLineAtBottom() {
         scrollInRegion()
     }
 
+    /**
+     * Clear all screen cells to default empty cells and reset the cursor to (0, 0).
+     *
+     * Does not affect the scrollback history. Use [clearScreenAndScrollback] to also erase history.
+     */
     fun clearScreen() {
         for (line in screen) {
             line.clear()
@@ -120,6 +187,11 @@ class TerminalBuffer(
         cursorRow = 0
     }
 
+    /**
+     * Clear all screen cells and erase the entire scrollback history.
+     *
+     * Resets the cursor to (0, 0) via [clearScreen].
+     */
     fun clearScreenAndScrollback() {
         clearScreen()
         scrollback.clear()
@@ -127,17 +199,31 @@ class TerminalBuffer(
 
     // --- Scroll Region ---
 
+    /**
+     * Set the active scroll region to rows [[top]..[bottom]] (0-based, inclusive).
+     *
+     * Scrolling operations ([insertLineAtBottom], LineFeed at the bottom margin) operate only
+     * within this region. Invalid arguments (out of bounds or inverted range) are ignored.
+     */
     fun setScrollRegion(top: Int, bottom: Int) {
         if (top < 0 || bottom >= height || top > bottom) return
         scrollTop = top
         scrollBottom = bottom
     }
 
+    /** Reset the scroll region to cover the entire screen. */
     fun resetScrollRegion() {
         scrollTop = 0
         scrollBottom = height - 1
     }
 
+    /**
+     * Scroll the active scroll region up by one line.
+     *
+     * The top line of the region is removed. When the region spans the full screen, the removed
+     * line is moved to the scrollback history (trimming the oldest entry if [maxScrollbackSize] is
+     * exceeded). A new blank line is inserted at the bottom of the region.
+     */
     fun scrollInRegion() {
         if (scrollTop >= scrollBottom) {
             // Single-line region — just clear it
@@ -157,6 +243,18 @@ class TerminalBuffer(
 
     // --- Resize ---
 
+    /**
+     * Resize the terminal to [newWidth] columns and [newHeight] rows.
+     *
+     * Width changes resize every line (both screen and scrollback) via [Line.resizedTo], padding
+     * with spaces or truncating as needed, and correctly handling wide characters at the boundary.
+     *
+     * Height increases pull the most recent scrollback lines back onto the screen; height
+     * decreases push the top screen lines into scrollback (subject to [maxScrollbackSize]).
+     *
+     * After resizing, the cursor is clamped to the new bounds and the scroll region is reset to
+     * the full screen.
+     */
     fun resize(newWidth: Int, newHeight: Int) {
         // Resize width for all lines
         if (newWidth != width) {
@@ -201,6 +299,12 @@ class TerminalBuffer(
         resetScrollRegion()
     }
 
+    /**
+     * Insert [text] at the current cursor position, shifting existing content to the right.
+     *
+     * Characters that would overflow the line width are discarded. The cursor advances after each
+     * inserted character, stopping at the last column.
+     */
     fun insertText(text: String) {
         if (text.isEmpty()) return
         val line = screen[cursorRow]
@@ -216,6 +320,14 @@ class TerminalBuffer(
 
     // --- applyCommand ---
 
+    /**
+     * Apply a parsed [TerminalCommand] to this buffer.
+     *
+     * This is the primary integration point between [terminal.ansi.VT100Parser] and the buffer.
+     * Each command variant maps to one or more buffer operations. Unknown or unimplemented
+     * commands should be handled by adding new variants to [TerminalCommand] and corresponding
+     * branches here.
+     */
     fun applyCommand(command: TerminalCommand) {
         when (command) {
             is TerminalCommand.Print -> {

@@ -3,6 +3,23 @@ package terminal.ansi
 import terminal.buffer.Color
 import terminal.buffer.Style
 
+/**
+ * VT100/ANSI escape sequence parser implemented as a character-by-character state machine.
+ *
+ * Input bytes are fed via [feed]. For each recognised sequence or printable character, the
+ * [dispatch] callback receives the corresponding [TerminalCommand]. Unrecognised sequences are
+ * silently discarded, preserving robustness against unknown escape codes.
+ *
+ * Supported sequences:
+ * - Printable ASCII characters → [TerminalCommand.Print]
+ * - C0 controls: CR, LF, BS, TAB
+ * - CSI sequences: cursor movement (A–D, H/f), erase (J/K), SGR (m), scroll region (r),
+ *   insert/delete characters (@/P) and lines (L/M)
+ * - OSC strings (terminated by BEL or ESC \): collected and discarded
+ * - DEC private mode sequences (`ESC [ ? …`): silently ignored
+ *
+ * The parser uses seven internal states defined in [ParserState].
+ */
 class VT100Parser(private val dispatch: (TerminalCommand) -> Unit) {
 
     private companion object {
@@ -19,6 +36,13 @@ class VT100Parser(private val dispatch: (TerminalCommand) -> Unit) {
     private var currentParam: Int = -1
     private var privateMode: Boolean = false
 
+    /**
+     * Process [input] one character at a time, dispatching [TerminalCommand] instances for each
+     * complete sequence or printable character encountered.
+     *
+     * Partial sequences are buffered internally and completed when subsequent calls provide the
+     * remaining bytes. The parser state persists across calls, so streaming input is supported.
+     */
     fun feed(input: String) {
         for (ch in input) {
             processByte(ch)
