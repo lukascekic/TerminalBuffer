@@ -17,6 +17,7 @@ class VT100Parser(private val dispatch: (TerminalCommand) -> Unit) {
     private var state: ParserState = ParserState.GROUND
     private val params: MutableList<Int> = mutableListOf()
     private var currentParam: Int = -1
+    private var privateMode: Boolean = false
 
     fun feed(input: String) {
         for (ch in input) {
@@ -59,6 +60,7 @@ class VT100Parser(private val dispatch: (TerminalCommand) -> Unit) {
                 state = ParserState.CSI_ENTRY
                 params.clear()
                 currentParam = -1
+                privateMode = false
             }
             ch == ']' -> {
                 state = ParserState.OSC_STRING
@@ -92,6 +94,10 @@ class VT100Parser(private val dispatch: (TerminalCommand) -> Unit) {
                 params.add(0)
                 state = ParserState.CSI_PARAM
             }
+            ch in '<'..'?' -> {
+                privateMode = true
+                state = ParserState.CSI_PARAM
+            }
             ch in ' '..'/' -> {
                 state = ParserState.CSI_INTERMEDIATE
             }
@@ -106,7 +112,7 @@ class VT100Parser(private val dispatch: (TerminalCommand) -> Unit) {
     private fun handleCsiParam(ch: Char) {
         when {
             ch in '0'..'9' -> {
-                currentParam = if (currentParam < 0) (ch - '0') else currentParam * 10 + (ch - '0')
+                currentParam = if (currentParam < 0) (ch - '0') else (currentParam * 10 + (ch - '0')).coerceAtMost(9999)
             }
             ch == ';' -> {
                 params.add(if (currentParam < 0) 0 else currentParam)
@@ -147,6 +153,10 @@ class VT100Parser(private val dispatch: (TerminalCommand) -> Unit) {
     }
 
     private fun dispatchCsi(finalByte: Char) {
+        if (privateMode) {
+            privateMode = false
+            return
+        }
         val p = params.toList()
         when (finalByte) {
             'A' -> dispatch(TerminalCommand.CursorUp(p.getOrDefault(0, 1)))
