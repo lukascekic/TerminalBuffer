@@ -222,7 +222,7 @@ class TerminalBuffer(
                 writeText(command.char.toString())
             }
             is TerminalCommand.SetCursorPosition -> {
-                setCursorPosition(command.column, command.row)
+                setCursorPosition(column = command.column, row = command.row)
             }
             is TerminalCommand.CursorUp -> moveCursorUp(command.n)
             is TerminalCommand.CursorDown -> moveCursorDown(command.n)
@@ -249,9 +249,9 @@ class TerminalBuffer(
                 cursorColumn = 0
             }
             is TerminalCommand.LineFeed -> {
-                if (cursorRow >= scrollBottom) {
+                if (cursorRow == scrollBottom) {
                     scrollInRegion()
-                } else {
+                } else if (cursorRow < height - 1) {
                     cursorRow++
                 }
             }
@@ -295,7 +295,13 @@ class TerminalBuffer(
                     screen[cursorRow][col] = Cell()
                 }
             }
-            2 -> clearScreen()
+            2 -> {
+                val savedCol = cursorColumn
+                val savedRow = cursorRow
+                clearScreen()
+                cursorColumn = savedCol
+                cursorRow = savedRow
+            }
             3 -> clearScreenAndScrollback()
         }
     }
