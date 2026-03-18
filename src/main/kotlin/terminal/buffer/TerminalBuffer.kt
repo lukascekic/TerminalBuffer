@@ -73,4 +73,44 @@ class TerminalBuffer(
         }
         cursorColumn = cursorColumn.coerceAtMost(width - 1)
     }
+
+    fun fillLine(char: Char = ' ') {
+        val cell = Cell(char, currentAttributes)
+        screen[cursorRow].clear(cell)
+    }
+
+    fun insertLineAtBottom() {
+        val topLine = screen.removeAt(0)
+        scrollback.add(topLine)
+        if (scrollback.size > maxScrollbackSize) {
+            scrollback.removeAt(0)
+        }
+        screen.add(Line(width))
+    }
+
+    fun clearScreen() {
+        for (line in screen) {
+            line.clear()
+        }
+        cursorColumn = 0
+        cursorRow = 0
+    }
+
+    fun clearScreenAndScrollback() {
+        clearScreen()
+        scrollback.clear()
+    }
+
+    fun insertText(text: String) {
+        if (text.isEmpty()) return
+        val line = screen[cursorRow]
+        for (ch in text) {
+            if (cursorColumn >= width) break
+            for (i in width - 1 downTo cursorColumn + 1) {
+                line[i] = line[i - 1]
+            }
+            line[cursorColumn] = Cell(ch, currentAttributes)
+            cursorColumn = (cursorColumn + 1).coerceAtMost(width - 1)
+        }
+    }
 }
