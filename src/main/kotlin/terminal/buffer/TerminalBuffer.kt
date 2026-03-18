@@ -71,9 +71,28 @@ class TerminalBuffer(
     fun writeText(text: String) {
         if (text.isEmpty()) return
         for (ch in text) {
-            if (cursorColumn >= width) break
-            screen[cursorRow][cursorColumn] = Cell(ch, currentAttributes)
-            if (cursorColumn < width - 1) cursorColumn++
+            val isWide = WideCharUtil.isWide(ch)
+            val charWidth = if (isWide) 2 else 1
+
+            if (cursorColumn + charWidth > width) break
+
+            clearWideCharAt(cursorColumn, cursorRow)
+
+            screen[cursorRow][cursorColumn] = Cell(ch, currentAttributes, charWidth)
+            if (isWide && cursorColumn + 1 < width) {
+                screen[cursorRow][cursorColumn + 1] = Cell(' ', currentAttributes, 0)
+            }
+
+            cursorColumn = (cursorColumn + charWidth).coerceAtMost(width - 1)
+        }
+    }
+
+    private fun clearWideCharAt(column: Int, row: Int) {
+        val cell = screen[row][column]
+        if (cell.width == 2 && column + 1 < width) {
+            screen[row][column + 1] = Cell()
+        } else if (cell.width == 0 && column > 0) {
+            screen[row][column - 1] = Cell()
         }
     }
 
