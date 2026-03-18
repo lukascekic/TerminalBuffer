@@ -126,6 +126,49 @@ class TerminalBuffer(
         scrollback.clear()
     }
 
+    fun resize(newWidth: Int, newHeight: Int) {
+        // Resize width for all lines
+        if (newWidth != width) {
+            for (i in screen.indices) {
+                screen[i] = screen[i].resizedTo(newWidth)
+            }
+            for (i in scrollback.indices) {
+                scrollback[i] = scrollback[i].resizedTo(newWidth)
+            }
+        }
+
+        // Resize height
+        if (newHeight > height) {
+            // Pull lines from scrollback
+            val linesToPull = minOf(newHeight - height, scrollback.size)
+            val pulled = mutableListOf<Line>()
+            repeat(linesToPull) {
+                pulled.add(0, scrollback.removeAt(scrollback.size - 1))
+            }
+            screen.addAll(0, pulled)
+            // Fill remaining with empty lines
+            while (screen.size < newHeight) {
+                screen.add(Line(newWidth))
+            }
+        } else if (newHeight < height) {
+            // Push top lines to scrollback
+            val linesToPush = height - newHeight
+            repeat(linesToPush) {
+                scrollback.add(screen.removeAt(0))
+                if (scrollback.size > maxScrollbackSize) {
+                    scrollback.removeAt(0)
+                }
+            }
+        }
+
+        width = newWidth
+        height = newHeight
+
+        // Clamp cursor
+        cursorColumn = cursorColumn.coerceIn(0, width - 1)
+        cursorRow = cursorRow.coerceIn(0, height - 1)
+    }
+
     fun insertText(text: String) {
         if (text.isEmpty()) return
         val line = screen[cursorRow]
