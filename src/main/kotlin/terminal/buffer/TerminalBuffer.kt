@@ -1,10 +1,14 @@
 package terminal.buffer
 
 class TerminalBuffer(
-    var width: Int,
-    var height: Int,
+    width: Int,
+    height: Int,
     val maxScrollbackSize: Int = 1000
 ) {
+    var width: Int = width
+        private set
+    var height: Int = height
+        private set
     private val screen: MutableList<Line> = MutableList(height) { Line(width) }
     private val scrollback: MutableList<Line> = mutableListOf()
     private var cursorColumn: Int = 0
