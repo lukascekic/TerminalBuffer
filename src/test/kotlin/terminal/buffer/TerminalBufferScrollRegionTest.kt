@@ -2,6 +2,7 @@ package terminal.buffer
 
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
+import terminal.ansi.TerminalCommand
 
 class TerminalBufferScrollRegionTest {
 
@@ -74,5 +75,29 @@ class TerminalBufferScrollRegionTest {
         buffer.scrollInRegion()
         buffer.scrollbackSize shouldBe 1
         buffer.getScrollbackLineAsString(0) shouldBe "Line0"
+    }
+
+    @Test
+    fun `LineFeed at scroll bottom triggers scroll`() {
+        val buffer = TerminalBuffer(width = 10, height = 5)
+        buffer.setScrollRegion(1, 3)
+        buffer.setCursorPosition(0, 1); buffer.writeText("R1")
+        buffer.setCursorPosition(0, 2); buffer.writeText("R2")
+        buffer.setCursorPosition(0, 3); buffer.writeText("R3")
+        buffer.applyCommand(TerminalCommand.LineFeed)
+        buffer.getLineAsString(1) shouldBe "R2"
+        buffer.getLineAsString(2) shouldBe "R3"
+        buffer.getLineAsString(3) shouldBe ""
+    }
+
+    @Test
+    fun `LineFeed below scroll region does not scroll`() {
+        val buffer = TerminalBuffer(width = 10, height = 5)
+        buffer.setScrollRegion(0, 2)
+        buffer.setCursorPosition(0, 0); buffer.writeText("Top")
+        buffer.setCursorPosition(0, 4)  // Below scroll region
+        buffer.applyCommand(TerminalCommand.LineFeed)
+        buffer.getLineAsString(0) shouldBe "Top"  // Region was NOT scrolled
+        buffer.getCursorPosition().row shouldBe 4  // Cursor stays (already at bottom)
     }
 }
