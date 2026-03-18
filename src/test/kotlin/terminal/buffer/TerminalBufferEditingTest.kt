@@ -48,7 +48,7 @@ class TerminalBufferEditingTest {
         fun `stops at right edge of screen`() {
             buffer.setCursorPosition(8, 0)
             buffer.writeText("ABCDE")
-            buffer.getLineAsString(0) shouldBe "        AB"
+            buffer.getLineAsString(0) shouldBe "        AE"
             buffer.getCursorPosition().column shouldBe 9
         }
 

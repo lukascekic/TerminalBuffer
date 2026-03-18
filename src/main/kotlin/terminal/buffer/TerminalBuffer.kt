@@ -69,9 +69,8 @@ class TerminalBuffer(
         for (ch in text) {
             if (cursorColumn >= width) break
             screen[cursorRow][cursorColumn] = Cell(ch, currentAttributes)
-            cursorColumn++
+            if (cursorColumn < width - 1) cursorColumn++
         }
-        cursorColumn = cursorColumn.coerceAtMost(width - 1)
     }
 
     fun fillLine(char: Char = ' ') {
