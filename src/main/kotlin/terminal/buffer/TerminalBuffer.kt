@@ -1,5 +1,7 @@
 package terminal.buffer
 
+import terminal.ansi.TerminalCommand
+
 class TerminalBuffer(
     width: Int,
     height: Int,
@@ -14,6 +16,8 @@ class TerminalBuffer(
     private var cursorColumn: Int = 0
     private var cursorRow: Int = 0
     var currentAttributes: TextAttributes = TextAttributes.DEFAULT
+    private var scrollTop: Int = 0
+    private var scrollBottom: Int = height - 1
 
     val scrollbackSize: Int get() = scrollback.size
 
@@ -105,12 +109,7 @@ class TerminalBuffer(
     }
 
     fun insertLineAtBottom() {
-        val topLine = screen.removeAt(0)
-        scrollback.add(topLine)
-        if (scrollback.size > maxScrollbackSize) {
-            scrollback.removeAt(0)
-        }
-        screen.add(Line(width))
+        scrollInRegion()
     }
 
     fun clearScreen() {
@@ -125,6 +124,38 @@ class TerminalBuffer(
         clearScreen()
         scrollback.clear()
     }
+
+    // --- Scroll Region ---
+
+    fun setScrollRegion(top: Int, bottom: Int) {
+        if (top < 0 || bottom >= height || top > bottom) return
+        scrollTop = top
+        scrollBottom = bottom
+    }
+
+    fun resetScrollRegion() {
+        scrollTop = 0
+        scrollBottom = height - 1
+    }
+
+    fun scrollInRegion() {
+        if (scrollTop >= scrollBottom) {
+            // Single-line region — just clear it
+            screen[scrollTop].clear()
+            return
+        }
+        val removedLine = screen.removeAt(scrollTop)
+        if (scrollTop == 0 && scrollBottom == height - 1) {
+            // Full screen scroll — add to scrollback
+            scrollback.add(removedLine)
+            if (scrollback.size > maxScrollbackSize) {
+                scrollback.removeAt(0)
+            }
+        }
+        screen.add(scrollBottom, Line(width))
+    }
+
+    // --- Resize ---
 
     fun resize(newWidth: Int, newHeight: Int) {
         // Resize width for all lines
@@ -167,6 +198,7 @@ class TerminalBuffer(
         // Clamp cursor
         cursorColumn = cursorColumn.coerceIn(0, width - 1)
         cursorRow = cursorRow.coerceIn(0, height - 1)
+        resetScrollRegion()
     }
 
     fun insertText(text: String) {
@@ -179,6 +211,150 @@ class TerminalBuffer(
             }
             line[cursorColumn] = Cell(ch, currentAttributes)
             cursorColumn = (cursorColumn + 1).coerceAtMost(width - 1)
+        }
+    }
+
+    // --- applyCommand ---
+
+    fun applyCommand(command: TerminalCommand) {
+        when (command) {
+            is TerminalCommand.Print -> {
+                writeText(command.char.toString())
+            }
+            is TerminalCommand.SetCursorPosition -> {
+                setCursorPosition(command.column, command.row)
+            }
+            is TerminalCommand.CursorUp -> moveCursorUp(command.n)
+            is TerminalCommand.CursorDown -> moveCursorDown(command.n)
+            is TerminalCommand.CursorForward -> moveCursorRight(command.n)
+            is TerminalCommand.CursorBackward -> moveCursorLeft(command.n)
+            is TerminalCommand.EraseDisplay -> eraseDisplay(command.mode)
+            is TerminalCommand.EraseLine -> eraseLine(command.mode)
+            is TerminalCommand.SetForeground -> {
+                currentAttributes = currentAttributes.copy(foreground = command.color)
+            }
+            is TerminalCommand.SetBackground -> {
+                currentAttributes = currentAttributes.copy(background = command.color)
+            }
+            is TerminalCommand.SetStyleOn -> {
+                currentAttributes = currentAttributes.copy(styles = currentAttributes.styles + command.style)
+            }
+            is TerminalCommand.SetStyleOff -> {
+                currentAttributes = currentAttributes.copy(styles = currentAttributes.styles - command.style)
+            }
+            is TerminalCommand.ResetAttributes -> {
+                currentAttributes = TextAttributes.DEFAULT
+            }
+            is TerminalCommand.CarriageReturn -> {
+                cursorColumn = 0
+            }
+            is TerminalCommand.LineFeed -> {
+                if (cursorRow >= scrollBottom) {
+                    scrollInRegion()
+                } else {
+                    cursorRow++
+                }
+            }
+            is TerminalCommand.Backspace -> {
+                cursorColumn = (cursorColumn - 1).coerceAtLeast(0)
+            }
+            is TerminalCommand.InsertCharacters -> insertCharacters(command.n)
+            is TerminalCommand.DeleteCharacters -> deleteCharacters(command.n)
+            is TerminalCommand.InsertLines -> insertLines(command.n)
+            is TerminalCommand.DeleteLines -> deleteLines(command.n)
+            is TerminalCommand.SetScrollRegion -> {
+                // Bug fix: ESC[r (no params) produces SetScrollRegion(0, 0) — reset to full screen
+                if (command.bottom == 0 || command.bottom < command.top) {
+                    resetScrollRegion()
+                } else {
+                    setScrollRegion(command.top, command.bottom)
+                }
+            }
+        }
+    }
+
+    // --- Erase Operations ---
+
+    private fun eraseDisplay(mode: Int) {
+        when (mode) {
+            0 -> {
+                // Clear from cursor to end of screen
+                for (col in cursorColumn until width) {
+                    screen[cursorRow][col] = Cell()
+                }
+                for (row in cursorRow + 1 until height) {
+                    screen[row].clear()
+                }
+            }
+            1 -> {
+                // Clear from start to cursor
+                for (row in 0 until cursorRow) {
+                    screen[row].clear()
+                }
+                for (col in 0..cursorColumn) {
+                    screen[cursorRow][col] = Cell()
+                }
+            }
+            2 -> clearScreen()
+            3 -> clearScreenAndScrollback()
+        }
+    }
+
+    private fun eraseLine(mode: Int) {
+        when (mode) {
+            0 -> {
+                for (col in cursorColumn until width) {
+                    screen[cursorRow][col] = Cell()
+                }
+            }
+            1 -> {
+                for (col in 0..cursorColumn) {
+                    screen[cursorRow][col] = Cell()
+                }
+            }
+            2 -> screen[cursorRow].clear()
+        }
+    }
+
+    // --- Insert/Delete Characters and Lines ---
+
+    private fun insertCharacters(n: Int) {
+        val line = screen[cursorRow]
+        for (i in width - 1 downTo cursorColumn + n) {
+            line[i] = line[i - n]
+        }
+        for (i in cursorColumn until (cursorColumn + n).coerceAtMost(width)) {
+            line[i] = Cell(' ', currentAttributes)
+        }
+    }
+
+    private fun deleteCharacters(n: Int) {
+        val line = screen[cursorRow]
+        for (i in cursorColumn until (width - n).coerceAtLeast(cursorColumn)) {
+            line[i] = line[i + n]
+        }
+        for (i in (width - n).coerceAtLeast(cursorColumn) until width) {
+            line[i] = Cell()
+        }
+    }
+
+    private fun insertLines(n: Int) {
+        val actualN = n.coerceAtMost(scrollBottom - cursorRow + 1)
+        repeat(actualN) {
+            if (cursorRow in scrollTop..scrollBottom) {
+                screen.removeAt(scrollBottom)
+                screen.add(cursorRow, Line(width))
+            }
+        }
+    }
+
+    private fun deleteLines(n: Int) {
+        val actualN = n.coerceAtMost(scrollBottom - cursorRow + 1)
+        repeat(actualN) {
+            if (cursorRow in scrollTop..scrollBottom) {
+                screen.removeAt(cursorRow)
+                screen.add(scrollBottom, Line(width))
+            }
         }
     }
 }
