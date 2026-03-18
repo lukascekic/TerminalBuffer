@@ -36,8 +36,9 @@ class Line(val width: Int) {
         for (i in 0 until copyWidth) {
             newLine[i] = this[i]
         }
-        // Fix: clear orphaned continuation cell (second half of wide char cut off at boundary)
-        if (newWidth > 0 && newLine[newWidth - 1].width == 0) {
+        // Fix: clear orphaned continuation cell — only if predecessor is NOT a valid wide char
+        if (newWidth > 0 && newLine[newWidth - 1].width == 0
+            && (newWidth < 2 || newLine[newWidth - 2].width != 2)) {
             newLine[newWidth - 1] = Cell()
         }
         // Fix: clear wide char whose second half would fall outside the new boundary

@@ -75,6 +75,36 @@ class TerminalBufferResizeTest {
     }
 
     @Test
+    fun `resize preserves wide char fitting exactly at new width`() {
+        val buffer = TerminalBuffer(width = 10, height = 1)
+        buffer.writeText("A中")  // A at col 0, 中 at cols 1-2
+        buffer.resize(3, 1)
+        buffer.getCell(0, 0).char shouldBe 'A'
+        buffer.getCell(1, 0).char shouldBe '中'
+        buffer.getCell(1, 0).width shouldBe 2
+        buffer.getCell(2, 0).width shouldBe 0  // valid continuation preserved
+    }
+
+    @Test
+    fun `resize truncates wide char split at boundary`() {
+        val buffer = TerminalBuffer(width = 10, height = 1)
+        buffer.writeText("AB中")  // A at 0, B at 1, 中 at cols 2-3
+        buffer.resize(3, 1)  // col 3 (continuation) cut off
+        buffer.getCell(2, 0) shouldBe Cell()  // wide char main cell cleared
+    }
+
+    @Test
+    fun `resize preserves wide chars in scrollback`() {
+        val buffer = TerminalBuffer(width = 10, height = 2, maxScrollbackSize = 100)
+        buffer.writeText("中文")
+        buffer.insertLineAtBottom()
+        buffer.scrollbackSize shouldBe 1
+        buffer.getScrollbackCell(0, 0).char shouldBe '中'
+        buffer.getScrollbackCell(0, 0).width shouldBe 2
+        buffer.getScrollbackCell(2, 0).char shouldBe '文'
+    }
+
+    @Test
     fun `increase height with empty scrollback adds empty lines`() {
         val buffer = TerminalBuffer(width = 10, height = 2)
         buffer.setCursorPosition(0, 0)
