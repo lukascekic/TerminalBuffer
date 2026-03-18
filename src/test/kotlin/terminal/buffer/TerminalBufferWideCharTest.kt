@@ -28,6 +28,16 @@ class TerminalBufferWideCharTest {
         fun `Latin character is not wide`() {
             WideCharUtil.isWide('é') shouldBe false
         }
+
+        @Test
+        fun `halfwidth katakana is not wide`() {
+            WideCharUtil.isWide('\uFF71') shouldBe false
+        }
+
+        @Test
+        fun `Hangul vowel is not wide`() {
+            WideCharUtil.isWide('\u1160') shouldBe false
+        }
     }
 
     @Nested
