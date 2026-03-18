@@ -172,4 +172,74 @@ class VT100ParserTest {
             commands shouldContainExactly listOf(TerminalCommand.DeleteLines(3))
         }
     }
+
+    @Nested
+    inner class EdgeCases {
+
+        @Test
+        fun `SGR with no params resets attributes`() {
+            parser.feed("\u001B[m")
+            commands shouldContainExactly listOf(TerminalCommand.ResetAttributes)
+        }
+
+        @Test
+        fun `SGR bright foreground CSI 91m`() {
+            parser.feed("\u001B[91m")
+            commands shouldContainExactly listOf(TerminalCommand.SetForeground(Color.BRIGHT_RED))
+        }
+
+        @Test
+        fun `SGR bright background CSI 104m`() {
+            parser.feed("\u001B[104m")
+            commands shouldContainExactly listOf(TerminalCommand.SetBackground(Color.BRIGHT_BLUE))
+        }
+
+        @Test
+        fun `CSI 0A treats 0 as default 1`() {
+            parser.feed("\u001B[0A")
+            commands shouldContainExactly listOf(TerminalCommand.CursorUp(1))
+        }
+
+        @Test
+        fun `cursor position f is alias for H`() {
+            parser.feed("\u001B[3;5f")
+            commands shouldContainExactly listOf(TerminalCommand.SetCursorPosition(2, 4))
+        }
+
+        @Test
+        fun `SGR default foreground CSI 39m`() {
+            parser.feed("\u001B[39m")
+            commands shouldContainExactly listOf(TerminalCommand.SetForeground(Color.DEFAULT))
+        }
+
+        @Test
+        fun `SGR default background CSI 49m`() {
+            parser.feed("\u001B[49m")
+            commands shouldContainExactly listOf(TerminalCommand.SetBackground(Color.DEFAULT))
+        }
+
+        @Test
+        fun `OSC string terminated by BEL emits no commands`() {
+            parser.feed("\u001B]0;window title\u0007")
+            commands shouldBe emptyList()
+        }
+
+        @Test
+        fun `DEC private mode sequence is silently consumed`() {
+            parser.feed("\u001B[?25h")
+            commands shouldBe emptyList()
+        }
+
+        @Test
+        fun `DEC private mode followed by normal sequence`() {
+            parser.feed("\u001B[?25h\u001B[2A")
+            commands shouldContainExactly listOf(TerminalCommand.CursorUp(2))
+        }
+
+        @Test
+        fun `malformed CSI followed by valid sequence`() {
+            parser.feed("\u001B[1\u0000\u001B[2A")
+            commands shouldContainExactly listOf(TerminalCommand.CursorUp(2))
+        }
+    }
 }
