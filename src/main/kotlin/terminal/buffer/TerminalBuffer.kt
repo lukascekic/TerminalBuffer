@@ -77,6 +77,9 @@ class TerminalBuffer(
             if (cursorColumn + charWidth > width) break
 
             clearWideCharAt(cursorColumn, cursorRow)
+            if (isWide && cursorColumn + 1 < width) {
+                clearWideCharAt(cursorColumn + 1, cursorRow)
+            }
 
             screen[cursorRow][cursorColumn] = Cell(ch, currentAttributes, charWidth)
             if (isWide && cursorColumn + 1 < width) {

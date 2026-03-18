@@ -104,6 +104,19 @@ class TerminalBufferWideCharTest {
         }
 
         @Test
+        fun `wide char overwrites continuation cell of adjacent wide char`() {
+            val buffer = TerminalBuffer(width = 10, height = 3)
+            buffer.setCursorPosition(1, 0)
+            buffer.writeText("中")  // Occupies cols 1-2
+            buffer.setCursorPosition(0, 0)
+            buffer.writeText("文")  // Should occupy cols 0-1, column 2 must be cleared
+            buffer.getCell(0, 0).char shouldBe '文'
+            buffer.getCell(0, 0).width shouldBe 2
+            buffer.getCell(1, 0).width shouldBe 0  // continuation of 文
+            buffer.getCell(2, 0) shouldBe Cell()   // orphaned continuation cleared
+        }
+
+        @Test
         fun `mixed wide and narrow characters`() {
             val buffer = TerminalBuffer(width = 10, height = 3)
             buffer.setCursorPosition(0, 0)
