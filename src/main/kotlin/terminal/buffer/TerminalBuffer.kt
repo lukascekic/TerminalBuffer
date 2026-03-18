@@ -44,6 +44,24 @@ class TerminalBuffer(
         return all.joinToString("\n").trimEnd('\n', ' ')
     }
 
+    // --- Cursor Movement ---
+
+    fun moveCursorUp(n: Int) {
+        cursorRow = (cursorRow - n).coerceAtLeast(0)
+    }
+
+    fun moveCursorDown(n: Int) {
+        cursorRow = (cursorRow + n).coerceAtMost(height - 1)
+    }
+
+    fun moveCursorLeft(n: Int) {
+        cursorColumn = (cursorColumn - n).coerceAtLeast(0)
+    }
+
+    fun moveCursorRight(n: Int) {
+        cursorColumn = (cursorColumn + n).coerceAtMost(width - 1)
+    }
+
     // --- Editing ---
 
     fun writeText(text: String) {
