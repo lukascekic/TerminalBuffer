@@ -4,7 +4,6 @@ import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
-import java.util.EnumSet
 
 class CellTest {
 
@@ -16,7 +15,7 @@ class CellTest {
             val attrs = TextAttributes.DEFAULT
             attrs.foreground shouldBe Color.DEFAULT
             attrs.background shouldBe Color.DEFAULT
-            attrs.styles shouldBe EnumSet.noneOf(Style::class.java)
+            attrs.styles shouldBe emptySet<Style>()
         }
 
         @Test
@@ -24,11 +23,11 @@ class CellTest {
             val attrs = TextAttributes(
                 foreground = Color.RED,
                 background = Color.BLUE,
-                styles = EnumSet.of(Style.BOLD, Style.ITALIC)
+                styles = setOf(Style.BOLD, Style.ITALIC)
             )
             attrs.foreground shouldBe Color.RED
             attrs.background shouldBe Color.BLUE
-            attrs.styles shouldBe EnumSet.of(Style.BOLD, Style.ITALIC)
+            attrs.styles shouldBe setOf(Style.BOLD, Style.ITALIC)
         }
 
         @Test
@@ -59,7 +58,7 @@ class CellTest {
 
         @Test
         fun `cell preserves char and attributes`() {
-            val attrs = TextAttributes(foreground = Color.GREEN, styles = EnumSet.of(Style.UNDERLINE))
+            val attrs = TextAttributes(foreground = Color.GREEN, styles = setOf(Style.UNDERLINE))
             val cell = Cell(char = 'A', attributes = attrs)
             cell.char shouldBe 'A'
             cell.attributes shouldBe attrs
