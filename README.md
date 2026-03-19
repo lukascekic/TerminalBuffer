@@ -88,14 +88,26 @@ Parameter value `0` is treated as "use default" for all CSI commands (standard V
 
 ## Design Decisions
 
-### Immutability
+### Cell as Immutable Data Class
 
-`Cell` and `TextAttributes` are immutable `data class` objects. Writing a character creates a
-new `Cell` rather than mutating an existing one. This makes tests easy to reason about and
-eliminates aliasing bugs.
+`Cell` and `TextAttributes` are immutable `data class` objects rather than packed integers or
+mutable classes. Writing a character creates a new `Cell` instead of mutating an existing one.
+This trades some memory overhead for readability and
+correctness — for a typical 80x24 screen the difference is negligible, and immutability eliminates
+an entire class of aliasing bugs. If optimizing for production scale, the packed representation
+could be adopted without changing the public API.
 
-`Set<Style>` (not `EnumSet`) is used for `TextAttributes.styles` so that `copy()` produces a
-truly independent value. Styles are toggled with `styles + style` / `styles - style`.
+`Set<Style>` is used for `TextAttributes.styles` instead of `EnumSet` because `EnumSet` is
+mutable — `data class copy()` would share the same underlying set, causing silent aliasing bugs
+when modifying styles on a copied instance.
+
+### Color as Enum
+
+`Color` is an enum with 17 values (DEFAULT + 16 standard ANSI colors) rather than a sealed class
+hierarchy. The task specifies 16 colors, so an enum gives exhaustive `when` matching and
+compile-time safety with no complexity overhead. Extending to 256-color or truecolor would call
+for a sealed class (`Standard(index)`, `Extended(index)`, `TrueColor(r, g, b)`), but that's not
+needed here.
 
 ### Wide Character Handling
 
